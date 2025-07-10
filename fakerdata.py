@@ -9,194 +9,156 @@ import numpy as np
 fake = Faker()
 
 
+def parse_column_definitions(config):
+    defs = []
+    for section in config.sections():
+        if section.startswith("c"):
+            col = config[section]
+            col_def = {
+                "name": col.get("name", section),
+                "dtype": col.get("dtype", "str"),
+                "data": col.get("data", "random"),
+                "options": (
+                    col.get("options", "").split(",") if "options" in col else None
+                ),
+                "weights": (
+                    [int(w) for w in col.get("weights", "1").split(",")]
+                    if "weights" in col
+                    else None
+                ),
+                "range": (col.get("range", "").split(",") if "range" in col else None),
+                "value": col.get("value", "").split(",") if "value" in col else None,
+                "cols": int(col.get("cols", "0")),
+                "operation": col.get("operation"),
+                "operands": (
+                    col.get("operands", "").split(",") if "operands" in col else None
+                ),
+                "faker_method": col.get("faker_method", "name"),
+                "condition": col.get("condition"),
+            }
+            defs.append(col_def)
+    return defs
+
+
 def generate_data(config):
-    # Read configuration
     num_records = int(config["rec"]["num"])
-    mode = int(config["rec"]["mode"])
+    column_defs = parse_column_definitions(config)
+    df = pd.DataFrame()
 
-    # Initialize data
-    data = []
-    columns = []
+    for col_def in column_defs:
+        name = col_def["name"]
+        dtype = col_def["dtype"]
+        data_source = col_def["data"]
 
-    # Get all column sections and sort them
-    column_sections = [
-        section for section in config.sections() if section.startswith("c")
-    ]
-    column_sections.sort(key=lambda x: int(x[1:]))  # Sort by column number
+        if data_source == "company":
+            data = np.arange(1, num_records + 1)
 
-    # Create column names first
-    for section in column_sections:
-        col_name = config[section].get("name", section)
-        columns.append(col_name)
-
-    # Generate data
-    for i in range(num_records):
-        row = []
-
-        for section in column_sections:
-            # Get column settings
-            dtype = config[section].get("dtype", "str")
-            data_source = config[section]["data"]
-
-            # Generate data based on source
-            if data_source == "random":
-                options = config[section]["options"].split(",")
-                weights = config[section].get("weights", None)
-                if weights:
-                    weights = [int(w) for w in weights.split(",")]
-                    value = random.choices(options, weights=weights)[0]
-                else:
-                    value = random.choice(options)
-
-            elif data_source == "company":
-                # Generate company IDs
-                value = i + 1
-
-            elif data_source == "reference_range":
-                # Reference based on range conditions
-                ref_col = int(config[section]["cols"]) - 1
-                if ref_col < len(row):
-                    ref_value = int(row[ref_col])
-                    values = config[section]["value"].split(",")
-                    ranges = [int(x) for x in config[section]["range"].split(",")]
-
-                    # Find appropriate value based on range
-                    for j, range_val in enumerate(ranges):
-                        if ref_value <= range_val:
-                            value = values[j % len(values)]
-                            break
-                    else:
-                        value = values[-1]
-                else:
-                    value = config[section]["value"].split(",")[0]
-
-            elif data_source == "reference":
-                ref_col = int(config[section]["cols"]) - 1
-                if ref_col < len(row):
-                    ref_value = str(row[ref_col])
-                    keys = config[section]["value"].split(",")
-                    values = config[section]["range"].split(",")
-
-                    mapping = dict(zip(keys, values))
-                    value = mapping.get(
-                        ref_value, values[-1]
-                    )  # default to last if not matched
-                else:
-                    value = config[section]["range"].split(",")[-1]
-
-            elif data_source == "reference_boolean":
-                # Boolean reference - return value based on condition
-                ref_col = int(config[section]["cols"]) - 1
-                if ref_col < len(row):
-                    ref_value = int(row[ref_col])
-                    condition = int(config[section]["condition"])
-                    values = config[section]["value"].split(",")
-
-                    if ref_value == condition:
-                        value = values[0]  # True value
-                    else:
-                        value = values[1]  # False value
-                else:
-                    value = config[section]["value"].split(",")[1]
-
-            elif data_source == "reference_boolean2":
-                # Boolean reference with multiple possible values
-                ref_col = int(config[section]["cols"]) - 1
-                if ref_col < len(row):
-                    ref_value = int(row[ref_col])
-                    condition = int(config[section]["condition"])
-                    values = config[section]["value"].split(",")
-
-                    if ref_value == condition:
-                        value = random.choice(values)
-                    else:
-                        value = 0
-                else:
-                    value = 0
-
-            elif data_source == "total":
-                # Calculate total from operands
-                operands = config[section]["operands"].split(",")
-                operation = config[section]["operation"]
-
-                operand_values = []
-                for op in operands:
-                    op_col = int(op[1:]) - 1  # Remove 'c' and convert to index
-                    if op_col < len(row):
-                        operand_values.append(float(row[op_col]))
-                    else:
-                        operand_values.append(0.0)
-
-                if operation == "+":
-                    value = sum(operand_values)
-                elif operation == "-":
-                    value = operand_values[0] - sum(operand_values[1:])
-                elif operation == "*":
-                    value = 1
-                    for val in operand_values:
-                        value *= val
-                elif operation == "/":
-                    value = operand_values[0]
-                    for val in operand_values[1:]:
-                        if val != 0:
-                            value /= val
-                else:
-                    value = 0
-
-            elif data_source == "discount":
-                # Apply discount/markup to referenced column
-                ref_col = int(config[section]["cols"]) - 1
-                if ref_col < len(row):
-                    ref_value = float(row[ref_col])
-                    discount_value = float(config[section]["value"])
-                    operation = config[section]["operation"]
-
-                    if operation == "-":
-                        value = ref_value * (1 - discount_value / 100)
-                    elif operation == "+":
-                        value = ref_value * (1 + discount_value / 100)
-                    else:
-                        value = ref_value
-                else:
-                    value = 0
-
-            elif data_source == "increment":
-                # Increment from starting value
-                start_value = int(config[section].get("start", 1))
-                interval = int(config[section].get("interval", 1))
-                value = start_value + (i * interval)
-
-            elif data_source == "faker":
-                # Use Faker to generate realistic data
-                faker_method = config[section].get("faker_method", "name")
-                if hasattr(fake, faker_method):
-                    value = getattr(fake, faker_method)()
-                else:
-                    value = fake.name()
-
+        elif data_source == "random":
+            options = col_def["options"]
+            weights = col_def["weights"]
+            if weights:
+                data = np.random.choice(
+                    options, size=num_records, p=np.array(weights) / sum(weights)
+                )
             else:
-                value = None
+                data = np.random.choice(options, size=num_records)
 
-            # Convert to appropriate data type
-            if dtype == "int":
-                try:
-                    value = int(float(value))
-                except (ValueError, TypeError):
-                    value = 0
-            elif dtype == "float" or dtype == "decimal":
-                try:
-                    value = round(float(value), 2)
-                except (ValueError, TypeError):
-                    value = 0.0
-            elif dtype == "str":
-                value = str(value) if value is not None else ""
+        elif data_source == "faker":
+            method = col_def["faker_method"]
+            if hasattr(fake, method):
+                data = [getattr(fake, method)() for _ in range(num_records)]
+            else:
+                data = [fake.name() for _ in range(num_records)]
 
-            # Append data to row
-            row.append(value)
+        elif data_source == "increment":
+            start = int(config[f"c{column_defs.index(col_def) + 1}"]["start"])
+            interval = int(config[f"c{column_defs.index(col_def) + 1}"]["interval"])
+            data = np.arange(start, start + interval * num_records, interval)
 
-        data.append(row)
+        elif data_source in [
+            "reference",
+            "reference_range",
+            "reference_boolean",
+            "reference_boolean2",
+        ]:
+            # Placeholder, process after base columns are filled
+            data = [None] * num_records
 
-    return pd.DataFrame(data, columns=columns)
+        elif data_source in ["total", "discount"]:
+            data = [None] * num_records
+
+        else:
+            data = [None] * num_records
+
+        df[name] = data
+
+    # Post-process dependent columns
+    for col_def in column_defs:
+        name = col_def["name"]
+        data_source = col_def["data"]
+
+        if data_source == "reference_range":
+            ref_col = column_defs[col_def["cols"] - 1]["name"]
+            values = col_def["value"]
+            ranges = col_def["range"]
+            ref_vals = df[ref_col].astype(int)
+            df[name] = ref_vals.apply(
+                lambda val: next(
+                    (v for r, v in zip(ranges, values) if val <= r), values[-1]
+                )
+            )
+
+        elif data_source == "reference":
+            ref_col = column_defs[col_def["cols"] - 1]["name"]
+            keys = col_def["value"]
+            values = col_def["range"]
+            mapping = dict(zip(keys, values))
+            df[name] = df[ref_col].astype(str).map(lambda v: mapping.get(v, values[-1]))
+
+        elif data_source == "reference_boolean":
+            ref_col = column_defs[col_def["cols"] - 1]["name"]
+            condition = int(col_def["condition"])
+            val_true, val_false = col_def["value"]
+            df[name] = np.where(df[ref_col] == condition, val_true, val_false)
+
+        elif data_source == "reference_boolean2":
+            ref_col = column_defs[col_def["cols"] - 1]["name"]
+            condition = int(col_def["condition"])
+            values = col_def["value"]
+            df[name] = df[ref_col].apply(
+                lambda v: random.choice(values) if int(v) == condition else 0
+            )
+
+        elif data_source == "total":
+            op = col_def["operation"]
+            operands = [
+                column_defs[int(o[1:]) - 1]["name"] for o in col_def["operands"]
+            ]
+            if op == "+":
+                df[name] = df[operands].astype(float).sum(axis=1)
+            elif op == "*":
+                df[name] = df[operands[0]].astype(float)
+                for operand in operands[1:]:
+                    df[name] *= df[operand].astype(float)
+
+        elif data_source == "discount":
+            ref_col = column_defs[col_def["cols"] - 1]["name"]
+            operation = col_def["operation"]
+            percent = float(col_def["value"][0])
+            if operation == "-":
+                df[name] = df[ref_col].astype(float) * (1 - percent / 100)
+            elif operation == "+":
+                df[name] = df[ref_col].astype(float) * (1 + percent / 100)
+
+        # Convert dtype
+        if col_def["dtype"] == "int":
+            df[name] = df[name].fillna(0).astype(int)
+        elif col_def["dtype"] in ["float", "decimal"]:
+            df[name] = df[name].fillna(0).astype(float).round(2)
+        else:
+            df[name] = df[name].fillna("").astype(str)
+
+    return df
 
 
 def append_data(config, df):
