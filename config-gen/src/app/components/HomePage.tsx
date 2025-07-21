@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 interface Column {
@@ -51,6 +51,10 @@ export default function HomePage() {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-update preview when configuration changes
   useEffect(() => {
@@ -180,11 +184,142 @@ export default function HomePage() {
     }
   };
 
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.endsWith(".ini")) {
+      setUploadError("Please select a .ini file");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await axios.post(
+        "http://localhost:8000/parse-ini",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const { data } = response.data;
+
+        // Populate the UI with parsed data
+        setNumRecords(data.num_records);
+        setMode(data.mode);
+        setColumns(data.columns);
+        setAppendRules(data.append_rules);
+        setReorder(data.reorder);
+
+        setUploadSuccess(response.data.message);
+
+        // Clear file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    } catch (error: any) {
+      console.error("Upload error:", error);
+
+      if (error.response?.data?.detail) {
+        setUploadError(error.response.data.detail);
+      } else {
+        setUploadError("Failed to upload and parse INI file");
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const clearUploadMessages = () => {
+    setUploadError(null);
+    setUploadSuccess(null);
+  };
+
   return (
     <div className="max-w-full mx-auto p-6 bg-white">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">
         Pseudo Data Generator
       </h1>
+
+      {/* Upload Section */}
+      <div className="bg-blue-50 p-4 rounded-lg mb-6 border border-blue-200">
+        <h2 className="text-lg font-semibold mb-3 text-blue-800">
+          Upload Existing Configuration
+        </h2>
+        <div className="flex flex-col sm:flex-row gap-3 items-start">
+          <button
+            onClick={triggerFileUpload}
+            disabled={isUploading}
+            className={`px-4 py-2 rounded-md font-medium transition-colors ${
+              isUploading
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : "bg-blue-500 text-white hover:bg-blue-600"
+            }`}
+          >
+            {isUploading ? "Uploading..." : "📁 Upload rules.ini"}
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ini"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+
+          <div className="flex-1 min-w-0">
+            {uploadError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
+                <div className="flex justify-between items-center">
+                  <span>❌ {uploadError}</span>
+                  <button
+                    onClick={clearUploadMessages}
+                    className="text-red-500 hover:text-red-700 ml-2"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {uploadSuccess && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded text-sm">
+                <div className="flex justify-between items-center">
+                  <span>✅ {uploadSuccess}</span>
+                  <button
+                    onClick={clearUploadMessages}
+                    className="text-green-500 hover:text-green-700 ml-2"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-blue-600 mt-2">
+          Upload a previously generated rules.ini file to auto-populate the
+          configuration
+        </p>
+      </div>
 
       <div className="flex flex-col xl:flex-row gap-6">
         {/* Configuration Panel */}
@@ -224,7 +359,9 @@ export default function HomePage() {
           {/* Columns Section */}
           <div className="mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Columns</h2>
+              <h2 className="text-xl font-semibold">
+                Columns ({columns.length})
+              </h2>
               <button
                 onClick={addColumn}
                 className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
@@ -322,11 +459,15 @@ export default function HomePage() {
                         <input
                           type="text"
                           placeholder="Red,Green,Blue"
+                          value={col.options.join(",")}
                           onChange={(e) =>
                             updateColumn(
                               index,
                               "options",
-                              e.target.value.split(",").map((s) => s.trim())
+                              e.target.value
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter((s) => s)
                             )
                           }
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -339,11 +480,15 @@ export default function HomePage() {
                         <input
                           type="text"
                           placeholder="30,50,20"
+                          value={col.weights.join(",")}
                           onChange={(e) =>
                             updateColumn(
                               index,
                               "weights",
-                              e.target.value.split(",").map(Number)
+                              e.target.value
+                                .split(",")
+                                .map((s) => parseInt(s.trim()))
+                                .filter((n) => !isNaN(n))
                             )
                           }
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -367,6 +512,69 @@ export default function HomePage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                  )}
+
+                  {col.data === "reference" && (
+                    <>
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Reference Column Number
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="1"
+                          value={col.cols || ""}
+                          onChange={(e) =>
+                            updateColumn(index, "cols", Number(e.target.value))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Source Values (comma-separated)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Alice_Smith,Bob_Johnson,Carol_Brown"
+                            value={col.value.join(",")}
+                            onChange={(e) =>
+                              updateColumn(
+                                index,
+                                "value",
+                                e.target.value
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter((s) => s)
+                              )
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Mapped Values (comma-separated)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Manager_A,Manager_B,Manager_C"
+                            value={col.range.join(",")}
+                            onChange={(e) =>
+                              updateColumn(
+                                index,
+                                "range",
+                                e.target.value
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter((s) => s)
+                              )
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   {col.data === "increment" && (
@@ -406,8 +614,9 @@ export default function HomePage() {
                     </div>
                   )}
 
-                  {col.data === "reference" && (
-                    <>
+                  {(col.data.includes("reference") ||
+                    col.data === "discount") &&
+                    col.data !== "reference" && (
                       <div className="mt-3">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Reference Column Number
@@ -422,44 +631,7 @@ export default function HomePage() {
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Source Values (comma-separated)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Alice_Smith,Bob_Johnson,Carol_Brown"
-                            onChange={(e) =>
-                              updateColumn(
-                                index,
-                                "value",
-                                e.target.value.split(",").map((s) => s.trim())
-                              )
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Mapped Values (comma-separated)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Manager_A,Manager_B,Manager_C"
-                            onChange={(e) =>
-                              updateColumn(
-                                index,
-                                "range",
-                                e.target.value.split(",").map((s) => s.trim())
-                              )
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
+                    )}
                 </div>
               ))}
             </div>

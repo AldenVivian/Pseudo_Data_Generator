@@ -9,6 +9,9 @@ import sys
 import pandas as pd
 import numpy as np
 from typing import List, Optional
+from fastapi import FastAPI, HTTPException, UploadFile, File
+import configparser
+import io
 
 # Add the current directory to Python path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -184,3 +187,183 @@ def preview_data(rule_file: RuleFile):
             "error": str(e),
             "message": "Error generating preview",
         }
+
+
+@app.post("/parse-ini")
+async def parse_ini_file(file: UploadFile = File(...)):
+    """Parse uploaded INI file and return structured data"""
+    try:
+        # Validate file type
+        if not file.filename.endswith(".ini"):
+            raise HTTPException(status_code=400, detail="File must be a .ini file")
+
+        # Read file content
+        content = await file.read()
+        ini_content = content.decode("utf-8")
+
+        # Parse INI content
+        config = configparser.ConfigParser()
+        config.read_string(ini_content)
+
+        # Extract [rec] section
+        if "rec" not in config.sections():
+            raise HTTPException(
+                status_code=400, detail="Invalid INI file: missing [rec] section"
+            )
+
+        rec_section = config["rec"]
+        num_records = int(rec_section.get("num", 100))
+        mode = int(rec_section.get("mode", 1))
+
+        # Extract [cX] sections (columns)
+        columns = []
+        for section_name in sorted(config.sections()):
+            if section_name.startswith("c") and section_name[1:].isdigit():
+                section = config[section_name]
+
+                column = {
+                    "name": section.get("name", ""),
+                    "dtype": section.get("dtype", "str"),
+                    "data": section.get("data", "random"),
+                    "options": (
+                        section.get("options", "").split(",")
+                        if section.get("options")
+                        else []
+                    ),
+                    "weights": (
+                        [
+                            int(w)
+                            for w in section.get("weights", "").split(",")
+                            if w.strip()
+                        ]
+                        if section.get("weights")
+                        else []
+                    ),
+                    "faker_method": section.get("faker_method", "name"),
+                    "cols": (
+                        int(section.get("cols", 0)) if section.get("cols") else None
+                    ),
+                    "value": (
+                        section.get("value", "").split(",")
+                        if section.get("value")
+                        else []
+                    ),
+                    "range": (
+                        section.get("range", "").split(",")
+                        if section.get("range")
+                        else []
+                    ),
+                    "condition": (
+                        section.get("condition", "")
+                        if section.get("condition")
+                        else None
+                    ),
+                    "operation": (
+                        section.get("operation", "")
+                        if section.get("operation")
+                        else None
+                    ),
+                    "operands": (
+                        section.get("operands", "").split(",")
+                        if section.get("operands")
+                        else []
+                    ),
+                    "start": (
+                        int(section.get("start", 0)) if section.get("start") else None
+                    ),
+                    "interval": (
+                        int(section.get("interval", 1))
+                        if section.get("interval")
+                        else None
+                    ),
+                }
+
+                # Clean up empty arrays
+                if not column["options"]:
+                    column["options"] = []
+                if not column["weights"]:
+                    column["weights"] = []
+                if not column["value"]:
+                    column["value"] = []
+                if not column["range"]:
+                    column["range"] = []
+                if not column["operands"]:
+                    column["operands"] = []
+
+                columns.append(column)
+
+        # Extract [aX] sections (append rules)
+        append_rules = []
+        for section_name in sorted(config.sections()):
+            if section_name.startswith("a") and section_name[1:].isdigit():
+                section = config[section_name]
+
+                rule = {
+                    "operation": section.get("operation", "replace"),
+                    "cols": (
+                        int(section.get("cols", 0)) if section.get("cols") else None
+                    ),
+                    "col_name": (
+                        section.get("col_name", "") if section.get("col_name") else None
+                    ),
+                    "find": section.get("find", "") if section.get("find") else None,
+                    "replace": (
+                        section.get("replace", "") if section.get("replace") else None
+                    ),
+                    "new_col": (
+                        section.get("new_col", "") if section.get("new_col") else None
+                    ),
+                    "data": section.get("data", "") if section.get("data") else None,
+                    "options": (
+                        section.get("options", "").split(",")
+                        if section.get("options")
+                        else []
+                    ),
+                    "weights": (
+                        [
+                            int(w)
+                            for w in section.get("weights", "").split(",")
+                            if w.strip()
+                        ]
+                        if section.get("weights")
+                        else []
+                    ),
+                    "faker_method": section.get("faker_method", "name"),
+                    "nullable": (
+                        float(section.get("nullable", 0.0))
+                        if section.get("nullable")
+                        else 0.0
+                    ),
+                }
+
+                append_rules.append(rule)
+
+        # Extract [reorder] section
+        reorder = []
+        if "reorder" in config.sections():
+            reorder_str = config["reorder"].get("order", "")
+            if reorder_str:
+                reorder = [int(x.strip()) for x in reorder_str.split(",") if x.strip()]
+
+        return {
+            "success": True,
+            "data": {
+                "num_records": num_records,
+                "mode": mode,
+                "columns": columns,
+                "append_rules": append_rules,
+                "reorder": reorder,
+            },
+            "message": f"Successfully parsed {len(columns)} columns and {len(append_rules)} append rules",
+        }
+
+    except configparser.Error as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid INI file format: {str(e)}"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid data in INI file: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error parsing INI file: {str(e)}")
