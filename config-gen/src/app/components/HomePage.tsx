@@ -95,7 +95,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="max-w-full mx-auto p-6 bg-white">
+    <div className="relative max-w-full mx-auto p-6 bg-white min-h-screen">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">
         Pseudo Data Generator
       </h1>
@@ -109,56 +109,49 @@ export default function HomePage() {
         setReorder={setReorder}
       />
 
-      <div className="flex flex-col xl:flex-row gap-6">
-        {/* Configuration Panel */}
-        <div className="flex-1 min-w-0">
-          {/* Basic Settings */}
-          <ConfigPanel
-            numRecords={numRecords}
-            setNumRecords={setNumRecords}
-            mode={mode}
-            setMode={setMode}
-          />
+      {/* Main Content - adjust margin when preview is open */}
+      <div
+        className={`transition-all duration-300 ease-in-out ${
+          showPreview ? "mr-96" : "mr-0"
+        }`}
+      >
+        {/* Basic Settings */}
+        <ConfigPanel
+          numRecords={numRecords}
+          setNumRecords={setNumRecords}
+          mode={mode}
+          setMode={setMode}
+        />
 
-          {/* Columns Section */}
-          <ColumnsSection setColumns={setColumns} columns={columns} />
+        {/* Columns Section */}
+        <ColumnsSection setColumns={setColumns} columns={columns} />
 
-          {/* Append Rules Section */}
-          <AppendRules
-            mode={mode}
-            appendRules={appendRules}
-            setAppendRules={setAppendRules}
-          />
+        {/* Append Rules Section */}
+        <AppendRules
+          mode={mode}
+          appendRules={appendRules}
+          setAppendRules={setAppendRules}
+        />
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 mt-8">
-            <button
-              onClick={togglePreview}
-              className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors ${
-                showPreview
-                  ? "bg-red-500 text-white hover:bg-red-600"
-                  : "bg-gray-500 text-white hover:bg-gray-600"
-              }`}
-            >
-              {showPreview ? "❌ Hide Preview" : "🔍 Show Preview"}
-            </button>
-            <button
-              onClick={handleSubmit}
-              className="flex-1 bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600 transition-colors font-medium"
-            >
-              🚀 Generate rules.ini
-            </button>
-          </div>
+        {/* Action Buttons - removed preview button */}
+        <div className="flex flex-col sm:flex-row gap-4 mt-8">
+          <button
+            onClick={handleSubmit}
+            className="flex-1 bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600 transition-colors font-medium"
+          >
+            🚀 Generate rules.ini
+          </button>
         </div>
-
-        {/* Preview Panel */}
-        {showPreview && (
-          <PreviewPane
-            isLoadingPreview={isLoadingPreview}
-            previewData={previewData}
-          />
-        )}
       </div>
+
+      {/* Sliding Preview Panel */}
+      <PreviewPane
+        isLoadingPreview={isLoadingPreview}
+        previewData={previewData}
+        isOpen={showPreview}
+        onToggle={togglePreview}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   );
 }
