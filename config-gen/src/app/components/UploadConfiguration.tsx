@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import axios from "axios";
-
 import { UploadConfigurationProps } from "@/types/types";
 
 export default function UploadConfiguration({
@@ -10,9 +9,7 @@ export default function UploadConfiguration({
   setAppendRules,
   setReorder,
 }: UploadConfigurationProps) {
-    
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
@@ -24,6 +21,70 @@ export default function UploadConfiguration({
   const clearUploadMessages = () => {
     setUploadError(null);
     setUploadSuccess(null);
+  };
+
+  // Helper function to transform parsed columns data
+  const transformColumnsData = (parsedColumns: any[]) => {
+    console.log("Raw parsed columns:", parsedColumns); // Debug log
+
+    return parsedColumns.map((column) => {
+      console.log("Processing column:", column); // Debug log
+
+      const transformedColumn = { ...column };
+
+      // Handle options field (convert comma-separated string to array)
+      if (column.options && typeof column.options === "string") {
+        transformedColumn.options = column.options
+          .split(",")
+          .map((option: string) => option.trim());
+        console.log("Transformed options:", transformedColumn.options);
+      } else if (!column.options) {
+        transformedColumn.options = [];
+      }
+
+      // Handle weights field (convert comma-separated string to array)
+      if (column.weights && typeof column.weights === "string") {
+        transformedColumn.weights = column.weights
+          .split(",")
+          .map((weight: string) => weight.trim());
+        console.log("Transformed weights:", transformedColumn.weights);
+      } else if (!column.weights) {
+        transformedColumn.weights = [];
+      }
+
+      // Create optionWeightPairs from options and weights arrays
+      if (transformedColumn.options && transformedColumn.options.length > 0) {
+        transformedColumn.optionWeightPairs = transformedColumn.options.map(
+          (option: string, index: number) => ({
+            option: option,
+            weight:
+              transformedColumn.weights && transformedColumn.weights[index]
+                ? parseFloat(transformedColumn.weights[index]) || 1
+                : 1,
+          })
+        );
+        console.log(
+          "Created optionWeightPairs:",
+          transformedColumn.optionWeightPairs
+        );
+      } else {
+        transformedColumn.optionWeightPairs = [];
+      }
+
+      // Map data types to match UI expectations
+      if (column.data === "random") {
+        transformedColumn.type = "random_selection";
+      } else if (column.data === "company") {
+        transformedColumn.type = "company_id";
+      }
+
+      // Ensure all required fields are present
+      transformedColumn.name = column.name || "";
+      transformedColumn.dtype = column.dtype || "str";
+
+      console.log("Final transformed column:", transformedColumn); // Debug log
+      return transformedColumn;
+    });
   };
 
   const handleFileUpload = async (
@@ -58,13 +119,18 @@ export default function UploadConfiguration({
 
       if (response.data.success) {
         const { data } = response.data;
+        console.log("Backend response data:", data); // Debug log
 
-        // Populate the UI with parsed data
+        // Transform columns data to match new UI structure
+        const transformedColumns = transformColumnsData(data.columns);
+        console.log("Transformed columns for UI:", transformedColumns); // Debug log
+
+        // Populate the UI with parsed and transformed data
         setNumRecords(data.num_records);
         setMode(data.mode);
-        setColumns(data.columns);
-        setAppendRules(data.append_rules);
-        setReorder(data.reorder);
+        setColumns(transformedColumns);
+        setAppendRules(data.append_rules || []);
+        setReorder(data.reorder || []);
 
         setUploadSuccess(response.data.message);
 

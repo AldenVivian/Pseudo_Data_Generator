@@ -127,11 +127,13 @@ export default function HomePage() {
         <ColumnsSection setColumns={setColumns} columns={columns} />
 
         {/* Append Rules Section */}
-        <AppendRules
-          mode={mode}
-          appendRules={appendRules}
-          setAppendRules={setAppendRules}
-        />
+        {mode == 2 && (
+          <AppendRules
+            mode={mode}
+            appendRules={appendRules}
+            setAppendRules={setAppendRules}
+          />
+        )}
 
         {/* Action Buttons - removed preview button */}
         <div className="flex flex-col sm:flex-row gap-4 mt-8">

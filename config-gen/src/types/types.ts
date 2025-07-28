@@ -2,8 +2,9 @@ export type Column = {
   name: string;
   dtype: "str" | "int" | "float" | "decimal";
   data: string;
-  options: string[];
-  weights: number[];
+  options?: string[];
+  weights?: string[];
+  optionWeightPairs?: Array<{ option: string; weight: number }>; // New field
   faker_method: string;
   cols?: number;
   value: string[];
@@ -14,20 +15,20 @@ export type Column = {
   start?: number;
   interval?: number;
 };
-
-export type AppendRule = {
+export interface AppendRule {
   operation: "replace" | "generate";
+  data?: "random" | "faker";
+  options?: string[];
+  weights?: number[];
+  optionWeightPairs?: Array<{ option: string; weight: number }>; // New field
+  faker_method?: string;
+  nullable?: number;
   cols?: number;
   col_name?: string;
   find?: string;
   replace?: string;
   new_col?: string;
-  data?: string;
-  options: string[];
-  weights: number[];
-  faker_method: string;
-  nullable: number;
-};
+}
 
 export type PreviewData = {
   preview_data: any[];
