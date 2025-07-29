@@ -4,7 +4,8 @@ export type Column = {
   data: string;
   options?: string[];
   weights?: string[];
-  optionWeightPairs?: Array<{ option: string; weight: number }>; // New field
+  optionWeightPairs?: Array<{ option: string; weight: number }>;
+  valueMappingPairs?: Array<{ sourceValue: string; mappedValue: string }>;
   faker_method: string;
   cols?: number;
   value: string[];
@@ -20,7 +21,7 @@ export interface AppendRule {
   data?: "random" | "faker";
   options?: string[];
   weights?: number[];
-  optionWeightPairs?: Array<{ option: string; weight: number }>; // New field
+  optionWeightPairs?: Array<{ option: string; weight: number }>;
   faker_method?: string;
   nullable?: number;
   cols?: number;

@@ -258,7 +258,7 @@ def build_from_config_path(config_path):
 def build_from_config_object(config):
     print(f"Config sections: {config.sections()}")
     for section in config.sections():
-        print(f"[{section}]: {dict(config[section])}")   
+        print(f"[{section}]: {dict(config[section])}")
     """
     Build DataFrame from config object directly
     """
@@ -312,6 +312,22 @@ def create_config_from_dict(config_dict):
             config[section_name]["options"] = ",".join(col["options"])
         if col.get("weights"):
             config[section_name]["weights"] = ",".join(map(str, col["weights"]))
+        if col.get("valueMappingPairs") and col.get("data") == "reference":
+            source_values = [
+                pair.get("sourceValue", "") for pair in col["valueMappingPairs"]
+            ]
+            mapped_values = [
+                pair.get("mappedValue", "") for pair in col["valueMappingPairs"]
+            ]
+            config[section_name]["value"] = ",".join(source_values)
+            config[section_name]["range"] = ",".join(mapped_values)
+        else:
+            # Fallback to original arrays if valueMappingPairs not present
+            if col.get("value"):
+                config[section_name]["value"] = ",".join(col["value"])
+            if col.get("range"):
+                config[section_name]["range"] = ",".join(col["range"])
+
         if col.get("cols"):
             config[section_name]["cols"] = str(col["cols"])
         if col.get("value"):

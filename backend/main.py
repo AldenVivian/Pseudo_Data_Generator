@@ -46,7 +46,7 @@ class Column(BaseModel):
     start: Optional[int] = None
     interval: Optional[int] = None
     column_position: Optional[int] = None
-
+    valueMappingPairs: Optional[List[dict]] = []
 class AppendRule(BaseModel):
     operation: str
     cols: Optional[int] = None
@@ -286,7 +286,19 @@ async def parse_ini_file(file: UploadFile = File(...)):
                     int(section.get("interval", 1)) if section.get("interval") else None
                 ),
             }
-
+            
+            if column["value"] and column["range"] and column["data"] == "reference":
+                column["valueMappingPairs"] = []
+                for i, source_value in enumerate(column["value"]):
+                    mapped_value = column["range"][i] if i < len(column["range"]) else column["range"][-1]
+                    column["valueMappingPairs"].append({
+                        "sourceValue": source_value.strip(),
+                        "mappedValue": mapped_value.strip()
+                    })
+                print(f"Created {len(column['valueMappingPairs'])} value mapping pairs for {column['name']}")
+            else:
+                column["valueMappingPairs"] = []
+                
             # Clean up empty arrays
             if not column["options"]:
                 column["options"] = []

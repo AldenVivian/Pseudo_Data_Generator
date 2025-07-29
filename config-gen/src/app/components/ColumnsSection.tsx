@@ -10,6 +10,11 @@ export default function ColumnsSection({
     [key: number]: boolean;
   }>({});
 
+  // Track which value mapping accordion sections are open
+  const [openValueMappingAccordions, setOpenValueMappingAccordions] = useState<{
+    [key: number]: boolean;
+  }>({});
+
   const addColumn = () => {
     setColumns([
       ...columns,
@@ -20,6 +25,7 @@ export default function ColumnsSection({
         options: [],
         weights: [],
         optionWeightPairs: [{ option: "", weight: 1 }],
+        valueMappingPairs: [],
         faker_method: "name",
         value: [],
         range: [],
@@ -27,9 +33,7 @@ export default function ColumnsSection({
       },
     ]);
   };
-  /*useEffect(() => {
-    console.log("columns > " + JSON.stringify(columns));
-  }, [columns]);*/
+
   const updateColumn = (index: number, field: keyof Column, value: any) => {
     const newCols = [...columns];
     (newCols[index] as any)[field] = value;
@@ -40,8 +44,11 @@ export default function ColumnsSection({
     setColumns(columns.filter((_, i) => i !== index));
     // Clean up accordion state for removed column
     const newOpenAccordions = { ...openAccordions };
+    const newOpenValueMappingAccordions = { ...openValueMappingAccordions };
     delete newOpenAccordions[index];
+    delete newOpenValueMappingAccordions[index];
     setOpenAccordions(newOpenAccordions);
+    setOpenValueMappingAccordions(newOpenValueMappingAccordions);
   };
 
   // Add a new option-weight pair
@@ -104,6 +111,72 @@ export default function ColumnsSection({
     }));
   };
 
+  // Toggle value mapping accordion state
+  const toggleValueMappingAccordion = (columnIndex: number) => {
+    setOpenValueMappingAccordions((prev) => ({
+      ...prev,
+      [columnIndex]: !prev[columnIndex],
+    }));
+  };
+
+  const addValueMappingPair = (columnIndex: number) => {
+    const newColumns = [...columns];
+    const column = newColumns[columnIndex];
+    const newPairs = [
+      ...(column.valueMappingPairs || []),
+      { sourceValue: "", mappedValue: "" },
+    ];
+    column.valueMappingPairs = newPairs;
+    updateValueAndRange(columnIndex, newPairs);
+    setColumns(newColumns);
+
+    // Auto-open accordion when adding mappings
+    setOpenValueMappingAccordions((prev) => ({
+      ...prev,
+      [columnIndex]: true,
+    }));
+  };
+
+  const removeValueMappingPair = (columnIndex: number, pairIndex: number) => {
+    const newColumns = [...columns];
+    const column = newColumns[columnIndex];
+    const newPairs = (column.valueMappingPairs || []).filter(
+      (_, i) => i !== pairIndex
+    );
+    column.valueMappingPairs = newPairs;
+    updateValueAndRange(columnIndex, newPairs);
+    setColumns(newColumns);
+  };
+
+  const updateValueMappingPair = (
+    columnIndex: number,
+    pairIndex: number,
+    field: "sourceValue" | "mappedValue",
+    value: string
+  ) => {
+    const newColumns = [...columns];
+    const column = newColumns[columnIndex];
+    const newPairs = [...(column.valueMappingPairs || [])];
+    newPairs[pairIndex] = { ...newPairs[pairIndex], [field]: value };
+    column.valueMappingPairs = newPairs;
+    updateValueAndRange(columnIndex, newPairs);
+    setColumns(newColumns);
+  };
+
+  // Keep the separate value and range arrays in sync for backend compatibility
+  const updateValueAndRange = (
+    columnIndex: number,
+    pairs: Array<{ sourceValue: string; mappedValue: string }>
+  ) => {
+    const newColumns = [...columns];
+    const column = newColumns[columnIndex];
+    const sourceValues = pairs.map((p) => p.sourceValue).filter(Boolean);
+    const mappedValues = pairs.map((p) => p.mappedValue).filter(Boolean);
+    column.value = sourceValues;
+    column.range = mappedValues;
+    setColumns(newColumns);
+  };
+
   return (
     <div className="mb-6">
       <div className="flex justify-between items-center mb-4">
@@ -124,9 +197,12 @@ export default function ColumnsSection({
       <div className="space-y-4">
         {columns.map((col, index) => {
           const isOpen = openAccordions[index] || false;
+          const isValueMappingOpen = openValueMappingAccordions[index] || false;
           const optionCount = col.optionWeightPairs?.length || 0;
+          const valueMappingCount = col.valueMappingPairs?.length || 0;
           const totalWeight = col.weights?.reduce((a, b) => a + b, 0) || 0;
           const hasOptions = col.data === "random";
+          const hasValueMapping = col.data === "reference";
 
           return (
             <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -184,9 +260,14 @@ export default function ColumnsSection({
                     value={col.data}
                     onChange={(e) => {
                       updateColumn(index, "data", e.target.value);
-                      // Auto-open accordion when switching to random
+                      // Auto-open accordion when switching to random or reference
                       if (e.target.value === "random") {
                         setOpenAccordions((prev) => ({
+                          ...prev,
+                          [index]: true,
+                        }));
+                      } else if (e.target.value === "reference") {
+                        setOpenValueMappingAccordions((prev) => ({
                           ...prev,
                           [index]: true,
                         }));
@@ -329,6 +410,141 @@ export default function ColumnsSection({
                 </div>
               )}
 
+              {/* Value Mapping Section for Reference data */}
+              {hasValueMapping && (
+                <div className="mt-4">
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Reference Column Number
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="1"
+                      value={col.cols || ""}
+                      onChange={(e) =>
+                        updateColumn(index, "cols", Number(e.target.value))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Value Mapping Accordion */}
+                  <div
+                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => toggleValueMappingAccordion(index)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className={`w-4 h-4 text-gray-600 transform transition-transform duration-200 ${
+                          isValueMappingOpen ? "rotate-90" : "rotate-0"
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                      <span className="text-sm font-medium text-gray-700">
+                        Value Mapping
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Summary when collapsed */}
+                      {!isValueMappingOpen && valueMappingCount > 0 && (
+                        <span className="text-xs text-gray-500">
+                          {valueMappingCount} mapping
+                          {valueMappingCount !== 1 ? "s" : ""}
+                        </span>
+                      )}
+
+                      {/* Add button - always visible */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent toggle when clicking add
+                          addValueMappingPair(index);
+                        }}
+                        className="text-blue-500 hover:text-blue-700 text-xs font-medium px-2 py-1 rounded hover:bg-blue-50"
+                      >
+                        + Add Mapping
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded value mapping content */}
+                  {isValueMappingOpen && (
+                    <div className="mt-3 space-y-2 pl-6">
+                      {(
+                        col.valueMappingPairs || [
+                          { sourceValue: "", mappedValue: "" },
+                        ]
+                      ).map((pair, pairIndex) => (
+                        <div
+                          key={pairIndex}
+                          className="flex gap-2 items-center"
+                        >
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={pair.sourceValue}
+                              onChange={(e) =>
+                                updateValueMappingPair(
+                                  index,
+                                  pairIndex,
+                                  "sourceValue",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Source value (e.g., Alice_Smith)"
+                            />
+                          </div>
+                          <div className="w-4 text-center text-gray-500">→</div>
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={pair.mappedValue}
+                              onChange={(e) =>
+                                updateValueMappingPair(
+                                  index,
+                                  pairIndex,
+                                  "mappedValue",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Mapped value (e.g., Manager_A)"
+                            />
+                          </div>
+                          {(col.valueMappingPairs?.length || 0) > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeValueMappingPair(index, pairIndex)
+                              }
+                              className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+
+                      <div className="mt-2 text-xs text-gray-500">
+                        💡 Map source values to their corresponding output
+                        values. Example: "Alice_Smith" → "Manager_A"
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Other data source fields */}
               {col.data === "faker" && (
                 <div className="mt-3">
@@ -345,69 +561,6 @@ export default function ColumnsSection({
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              )}
-
-              {col.data === "reference" && (
-                <>
-                  <div className="mt-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Reference Column Number
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="1"
-                      value={col.cols || ""}
-                      onChange={(e) =>
-                        updateColumn(index, "cols", Number(e.target.value))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Source Values (comma-separated)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Alice_Smith,Bob_Johnson,Carol_Brown"
-                        value={col.value.join(",")}
-                        onChange={(e) =>
-                          updateColumn(
-                            index,
-                            "value",
-                            e.target.value
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter((s) => s)
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Mapped Values (comma-separated)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Manager_A,Manager_B,Manager_C"
-                        value={col.range.join(",")}
-                        onChange={(e) =>
-                          updateColumn(
-                            index,
-                            "range",
-                            e.target.value
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter((s) => s)
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                </>
               )}
 
               {col.data === "increment" && (

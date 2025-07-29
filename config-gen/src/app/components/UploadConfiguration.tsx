@@ -24,18 +24,17 @@ export default function UploadConfiguration({
   };
 
   // Helper function to transform parsed columns data
-  // In UploadConfiguration.tsx, update the transformColumnsData function
   const transformColumnsData = (parsedColumns: any[]) => {
 
-    // Sort columns by their original INI order (c1, c2, c3, etc.)
     const sortedColumns = parsedColumns.sort((a, b) => {
       return (a.column_position || 0) - (b.column_position || 0);
     });
+
     return sortedColumns.map((column, index) => {
 
       const transformedColumn = { ...column };
 
-      // Handle options field (convert comma-separated string to array)
+      // Handle options and weights (existing code)
       if (column.options && typeof column.options === "string") {
         transformedColumn.options = column.options
           .split(",")
@@ -44,7 +43,6 @@ export default function UploadConfiguration({
         transformedColumn.options = [];
       }
 
-      // Handle weights field (convert comma-separated string to array)
       if (column.weights && typeof column.weights === "string") {
         transformedColumn.weights = column.weights
           .split(",")
@@ -53,7 +51,7 @@ export default function UploadConfiguration({
         transformedColumn.weights = [];
       }
 
-      // Create optionWeightPairs from options and weights arrays
+      // Create optionWeightPairs (existing code)
       if (transformedColumn.options && transformedColumn.options.length > 0) {
         transformedColumn.optionWeightPairs = transformedColumn.options.map(
           (option: string, index: number) => ({
@@ -68,6 +66,41 @@ export default function UploadConfiguration({
         transformedColumn.optionWeightPairs = [];
       }
 
+      if (column.value && typeof column.value === "string") {
+        transformedColumn.value = column.value
+          .split(",")
+          .map((val: string) => val.trim());
+      } else if (!column.value) {
+        transformedColumn.value = [];
+      }
+
+      if (column.range && typeof column.range === "string") {
+        transformedColumn.range = column.range
+          .split(",")
+          .map((val: string) => val.trim());
+      } else if (!column.range) {
+        transformedColumn.range = [];
+      }
+
+      if (
+        transformedColumn.value &&
+        transformedColumn.range &&
+        transformedColumn.data === "reference"
+      ) {
+        transformedColumn.valueMappingPairs = transformedColumn.value.map(
+          (sourceValue: string, index: number) => ({
+            sourceValue: sourceValue,
+            mappedValue:
+              transformedColumn.range && transformedColumn.range[index]
+                ? transformedColumn.range[index]
+                : transformedColumn.range[transformedColumn.range.length - 1] ||
+                  "",
+          })
+        );
+      } else {
+        transformedColumn.valueMappingPairs = [];
+      }
+
       // Map data types to match UI expectations
       if (column.data === "random") {
         transformedColumn.type = "random_selection";
@@ -75,7 +108,6 @@ export default function UploadConfiguration({
         transformedColumn.type = "company_id";
       }
 
-      // Ensure all required fields are present
       transformedColumn.name = column.name || "";
       transformedColumn.dtype = column.dtype || "str";
 
