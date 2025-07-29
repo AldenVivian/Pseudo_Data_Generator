@@ -27,9 +27,9 @@ export default function ColumnsSection({
       },
     ]);
   };
-  useEffect(() => {
+  /*useEffect(() => {
     console.log("columns > " + JSON.stringify(columns));
-  }, [columns]);
+  }, [columns]);*/
   const updateColumn = (index: number, field: keyof Column, value: any) => {
     const newCols = [...columns];
     (newCols[index] as any)[field] = value;

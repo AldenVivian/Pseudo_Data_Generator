@@ -7,6 +7,8 @@ from faker import Faker
 import numpy as np
 import tempfile
 import os
+import io
+import json
 
 fake = Faker()
 
@@ -254,6 +256,9 @@ def build_from_config_path(config_path):
 
 
 def build_from_config_object(config):
+    print(f"Config sections: {config.sections()}")
+    for section in config.sections():
+        print(f"[{section}]: {dict(config[section])}")   
     """
     Build DataFrame from config object directly
     """
@@ -261,7 +266,7 @@ def build_from_config_object(config):
 
     df = generate_data(config)
 
-    if mode >= 2:
+    if mode == 2:
         df = append_data(config, df)
     if mode == 3:
         df = reorder_columns(config, df)

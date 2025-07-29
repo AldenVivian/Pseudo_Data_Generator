@@ -24,11 +24,14 @@ export default function UploadConfiguration({
   };
 
   // Helper function to transform parsed columns data
+  // In UploadConfiguration.tsx, update the transformColumnsData function
   const transformColumnsData = (parsedColumns: any[]) => {
-    console.log("Raw parsed columns:", parsedColumns); // Debug log
 
-    return parsedColumns.map((column) => {
-      console.log("Processing column:", column); // Debug log
+    // Sort columns by their original INI order (c1, c2, c3, etc.)
+    const sortedColumns = parsedColumns.sort((a, b) => {
+      return (a.column_position || 0) - (b.column_position || 0);
+    });
+    return sortedColumns.map((column, index) => {
 
       const transformedColumn = { ...column };
 
@@ -37,7 +40,6 @@ export default function UploadConfiguration({
         transformedColumn.options = column.options
           .split(",")
           .map((option: string) => option.trim());
-        console.log("Transformed options:", transformedColumn.options);
       } else if (!column.options) {
         transformedColumn.options = [];
       }
@@ -47,7 +49,6 @@ export default function UploadConfiguration({
         transformedColumn.weights = column.weights
           .split(",")
           .map((weight: string) => weight.trim());
-        console.log("Transformed weights:", transformedColumn.weights);
       } else if (!column.weights) {
         transformedColumn.weights = [];
       }
@@ -62,10 +63,6 @@ export default function UploadConfiguration({
                 ? parseFloat(transformedColumn.weights[index]) || 1
                 : 1,
           })
-        );
-        console.log(
-          "Created optionWeightPairs:",
-          transformedColumn.optionWeightPairs
         );
       } else {
         transformedColumn.optionWeightPairs = [];
@@ -82,7 +79,6 @@ export default function UploadConfiguration({
       transformedColumn.name = column.name || "";
       transformedColumn.dtype = column.dtype || "str";
 
-      console.log("Final transformed column:", transformedColumn); // Debug log
       return transformedColumn;
     });
   };
@@ -119,11 +115,9 @@ export default function UploadConfiguration({
 
       if (response.data.success) {
         const { data } = response.data;
-        console.log("Backend response data:", data); // Debug log
 
         // Transform columns data to match new UI structure
         const transformedColumns = transformColumnsData(data.columns);
-        console.log("Transformed columns for UI:", transformedColumns); // Debug log
 
         // Populate the UI with parsed and transformed data
         setNumRecords(data.num_records);

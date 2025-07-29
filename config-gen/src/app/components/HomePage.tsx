@@ -9,6 +9,7 @@ import PreviewPane from "@/app/components/PreviewPane";
 import UploadConfiguration from "@/app/components/UploadConfiguration";
 import ConfigPanel from "@/app/components/ConfigPanel";
 import ColumnsSection from "@/app/components/ColumnsSection";
+import ReorderSection from "@/app/components/ReorderSection"; // New component
 
 export default function HomePage() {
   const [numRecords, setNumRecords] = useState(100);
@@ -25,7 +26,7 @@ export default function HomePage() {
     if (showPreview && columns.length > 0) {
       handlePreview();
     }
-  }, [columns, appendRules, numRecords, mode, showPreview]);
+  }, [columns, appendRules, numRecords, mode, showPreview, reorder]);
 
   const handleSubmit = async () => {
     const payload = {
@@ -65,6 +66,7 @@ export default function HomePage() {
       append_rules: appendRules,
       reorder,
     };
+    //console.log("preview payload > " + JSON.stringify(payload));
 
     try {
       const response = await axios.post(
@@ -126,8 +128,8 @@ export default function HomePage() {
         {/* Columns Section */}
         <ColumnsSection setColumns={setColumns} columns={columns} />
 
-        {/* Append Rules Section */}
-        {mode == 2 && (
+        {/* Append Rules Section - Show for Mode 2 and Mode 3 */}
+        {(mode === 2 || mode === 3) && (
           <AppendRules
             mode={mode}
             appendRules={appendRules}
@@ -135,7 +137,17 @@ export default function HomePage() {
           />
         )}
 
-        {/* Action Buttons - removed preview button */}
+        {/* Reorder Section - Show for Mode 3 only */}
+        {mode === 3 && (
+          <ReorderSection
+            columns={columns}
+            appendRules={appendRules}
+            reorder={reorder}
+            setReorder={setReorder}
+          />
+        )}
+
+        {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 mt-8">
           <button
             onClick={handleSubmit}

@@ -110,8 +110,7 @@ export default function PreviewPane({
               ) : (
                 <>
                   <div className="mb-3 text-sm text-gray-600">
-                    {previewData.message} • {previewData.shape[0]} rows ×{" "}
-                    {previewData.shape[1]} columns
+                    {previewData.message} x {previewData.shape[1]} columns
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">

@@ -114,11 +114,11 @@ export default function AppendRules({
   }
 
   return (
-    <div className="mb-6">
+    <div className="bg-green-50 p-4 rounded-lg mb-6 border border-green-200">
       <div className="flex justify-between items-center mb-4">
         <div>
-          <h2 className="text-xl font-semibold">Append Rules</h2>
-          <p className="text-sm text-gray-600">
+          <h2 className="text-xl font-semibold text-green-800">Append Rules</h2>
+          <p className="text-sm text-green-600">
             Apply post-generation modifications and add new columns
           </p>
         </div>

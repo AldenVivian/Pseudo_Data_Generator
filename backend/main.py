@@ -45,7 +45,7 @@ class Column(BaseModel):
     operands: List[str] = []
     start: Optional[int] = None
     interval: Optional[int] = None
-
+    column_position: Optional[int] = None
 
 class AppendRule(BaseModel):
     operation: str
@@ -59,7 +59,7 @@ class AppendRule(BaseModel):
     weights: List[int] = []
     faker_method: str = "name"
     nullable: float = 0.0
-
+    append_position: Optional[int] = None
 
 class RuleFile(BaseModel):
     num_records: int = 100
@@ -133,11 +133,18 @@ def generate_ini_file(rule_file: RuleFile):
 def preview_data(rule_file: RuleFile):
     """Generate preview data using the existing fakerdata logic"""
     try:
+        # FIXED: Ensure columns maintain their order
+        columns_with_order = []
+        for idx, col in enumerate(rule_file.columns):
+            col_dict = col.dict()
+            # Ensure we maintain the 1-based indexing that operands expect
+            columns_with_order.append(col_dict)
+
         # Convert to dict format with limited records for preview
         config_dict = {
-            "num_records": min(rule_file.num_records, 25),  # Limit to 25 rows max
+            "num_records": min(rule_file.num_records, 25),
             "mode": rule_file.mode,
-            "columns": [col.dict() for col in rule_file.columns],
+            "columns": columns_with_order,  # Maintains order
             "append_rules": [rule.dict() for rule in rule_file.append_rules],
             "reorder": rule_file.reorder,
         }
@@ -152,6 +159,7 @@ def preview_data(rule_file: RuleFile):
             }
 
         # Create config object
+        print(f"config_dict > {config_dict}")
         config = create_config_from_dict(config_dict)
 
         # Generate data using existing logic
@@ -183,7 +191,7 @@ def preview_data(rule_file: RuleFile):
         return {
             "preview_data": [],
             "columns": [],
-            "shape": [0, 0],
+            "shape": [0, 0],  # shape NOT REQUIRED?
             "error": str(e),
             "message": "Error generating preview",
         }
@@ -215,128 +223,137 @@ async def parse_ini_file(file: UploadFile = File(...)):
         num_records = int(rec_section.get("num", 100))
         mode = int(rec_section.get("mode", 1))
 
-        # Extract [cX] sections (columns)
+        # Extract [cX] sections (columns) - PRESERVE ORDER WITH POSITION TRACKING
         columns = []
-        for section_name in sorted(config.sections()):
+
+        # Get all column sections and sort them by column number to maintain order
+        column_sections = []
+        for section_name in config.sections():
             if section_name.startswith("c") and section_name[1:].isdigit():
-                section = config[section_name]
+                column_number = int(
+                    section_name[1:]
+                )  # Extract number from c1, c2, etc.
+                column_sections.append((column_number, section_name))
 
-                column = {
-                    "name": section.get("name", ""),
-                    "dtype": section.get("dtype", "str"),
-                    "data": section.get("data", "random"),
-                    "options": (
-                        section.get("options", "").split(",")
-                        if section.get("options")
-                        else []
-                    ),
-                    "weights": (
-                        [
-                            int(w)
-                            for w in section.get("weights", "").split(",")
-                            if w.strip()
-                        ]
-                        if section.get("weights")
-                        else []
-                    ),
-                    "faker_method": section.get("faker_method", "name"),
-                    "cols": (
-                        int(section.get("cols", 0)) if section.get("cols") else None
-                    ),
-                    "value": (
-                        section.get("value", "").split(",")
-                        if section.get("value")
-                        else []
-                    ),
-                    "range": (
-                        section.get("range", "").split(",")
-                        if section.get("range")
-                        else []
-                    ),
-                    "condition": (
-                        section.get("condition", "")
-                        if section.get("condition")
-                        else None
-                    ),
-                    "operation": (
-                        section.get("operation", "")
-                        if section.get("operation")
-                        else None
-                    ),
-                    "operands": (
-                        section.get("operands", "").split(",")
-                        if section.get("operands")
-                        else []
-                    ),
-                    "start": (
-                        int(section.get("start", 0)) if section.get("start") else None
-                    ),
-                    "interval": (
-                        int(section.get("interval", 1))
-                        if section.get("interval")
-                        else None
-                    ),
-                }
+        # Sort by column number to ensure proper order (c1, c2, c3, ...)
+        column_sections.sort(key=lambda x: x[0])
 
-                # Clean up empty arrays
-                if not column["options"]:
-                    column["options"] = []
-                if not column["weights"]:
-                    column["weights"] = []
-                if not column["value"]:
-                    column["value"] = []
-                if not column["range"]:
-                    column["range"] = []
-                if not column["operands"]:
-                    column["operands"] = []
+        print(
+            f"📋 Found {len(column_sections)} columns in order: {[f'{name} (pos {num})' for num, name in column_sections]}"
+        )
 
-                columns.append(column)
+        for column_number, section_name in column_sections:
+            section = config[section_name]
 
-        # Extract [aX] sections (append rules)
+            column = {
+                "name": section.get("name", ""),
+                "dtype": section.get("dtype", "str"),
+                "data": section.get("data", "random"),
+                "column_position": column_number,  # 🔥 ADD THIS: Preserve original position
+                "options": (
+                    section.get("options", "").split(",")
+                    if section.get("options")
+                    else []
+                ),
+                "weights": (
+                    [int(w) for w in section.get("weights", "").split(",") if w.strip()]
+                    if section.get("weights")
+                    else []
+                ),
+                "faker_method": section.get("faker_method", "name"),
+                "cols": (int(section.get("cols", 0)) if section.get("cols") else None),
+                "value": (
+                    section.get("value", "").split(",") if section.get("value") else []
+                ),
+                "range": (
+                    section.get("range", "").split(",") if section.get("range") else []
+                ),
+                "condition": (
+                    section.get("condition", "") if section.get("condition") else None
+                ),
+                "operation": (
+                    section.get("operation", "") if section.get("operation") else None
+                ),
+                "operands": (
+                    section.get("operands", "").split(",")
+                    if section.get("operands")
+                    else []
+                ),
+                "start": (
+                    int(section.get("start", 0)) if section.get("start") else None
+                ),
+                "interval": (
+                    int(section.get("interval", 1)) if section.get("interval") else None
+                ),
+            }
+
+            # Clean up empty arrays
+            if not column["options"]:
+                column["options"] = []
+            if not column["weights"]:
+                column["weights"] = []
+            if not column["value"]:
+                column["value"] = []
+            if not column["range"]:
+                column["range"] = []
+            if not column["operands"]:
+                column["operands"] = []
+
+            columns.append(column)
+            print(
+                f"✅ Parsed column {column_number}: {column['name']} (position {column['column_position']})"
+            )
+
+        # Extract [aX] sections (append rules) - ALSO PRESERVE ORDER
         append_rules = []
-        for section_name in sorted(config.sections()):
+
+        # Get all append rule sections and sort them by number
+        append_sections = []
+        for section_name in config.sections():
             if section_name.startswith("a") and section_name[1:].isdigit():
-                section = config[section_name]
+                append_number = int(section_name[1:])
+                append_sections.append((append_number, section_name))
 
-                rule = {
-                    "operation": section.get("operation", "replace"),
-                    "cols": (
-                        int(section.get("cols", 0)) if section.get("cols") else None
-                    ),
-                    "col_name": (
-                        section.get("col_name", "") if section.get("col_name") else None
-                    ),
-                    "find": section.get("find", "") if section.get("find") else None,
-                    "replace": (
-                        section.get("replace", "") if section.get("replace") else None
-                    ),
-                    "new_col": (
-                        section.get("new_col", "") if section.get("new_col") else None
-                    ),
-                    "data": section.get("data", "") if section.get("data") else None,
-                    "options": (
-                        section.get("options", "").split(",")
-                        if section.get("options")
-                        else []
-                    ),
-                    "weights": (
-                        [
-                            int(w)
-                            for w in section.get("weights", "").split(",")
-                            if w.strip()
-                        ]
-                        if section.get("weights")
-                        else []
-                    ),
-                    "faker_method": section.get("faker_method", "name"),
-                    "nullable": (
-                        float(section.get("nullable", 0.0))
-                        if section.get("nullable")
-                        else 0.0
-                    ),
-                }
+        # Sort by append rule number
+        append_sections.sort(key=lambda x: x[0])
 
-                append_rules.append(rule)
+        for append_number, section_name in append_sections:
+            section = config[section_name]
+
+            rule = {
+                "operation": section.get("operation", "replace"),
+                "append_position": append_number,  # 🔥 ADD THIS: Preserve append rule order
+                "cols": (int(section.get("cols", 0)) if section.get("cols") else None),
+                "col_name": (
+                    section.get("col_name", "") if section.get("col_name") else None
+                ),
+                "find": section.get("find", "") if section.get("find") else None,
+                "replace": (
+                    section.get("replace", "") if section.get("replace") else None
+                ),
+                "new_col": (
+                    section.get("new_col", "") if section.get("new_col") else None
+                ),
+                "data": section.get("data", "") if section.get("data") else None,
+                "options": (
+                    section.get("options", "").split(",")
+                    if section.get("options")
+                    else []
+                ),
+                "weights": (
+                    [int(w) for w in section.get("weights", "").split(",") if w.strip()]
+                    if section.get("weights")
+                    else []
+                ),
+                "faker_method": section.get("faker_method", "name"),
+                "nullable": (
+                    float(section.get("nullable", 0.0))
+                    if section.get("nullable")
+                    else 0.0
+                ),
+            }
+
+            append_rules.append(rule)
 
         # Extract [reorder] section
         reorder = []
@@ -344,6 +361,11 @@ async def parse_ini_file(file: UploadFile = File(...)):
             reorder_str = config["reorder"].get("order", "")
             if reorder_str:
                 reorder = [int(x.strip()) for x in reorder_str.split(",") if x.strip()]
+
+        # 🔍 Debug: Print final column order
+        print(
+            f"🎯 Final column order: {[(col['column_position'], col['name']) for col in columns]}"
+        )
 
         return {
             "success": True,
@@ -354,7 +376,7 @@ async def parse_ini_file(file: UploadFile = File(...)):
                 "append_rules": append_rules,
                 "reorder": reorder,
             },
-            "message": f"Successfully parsed {len(columns)} columns and {len(append_rules)} append rules",
+            "message": f"Successfully parsed {len(columns)} columns and {len(append_rules)} append rules in correct order",
         }
 
     except configparser.Error as e:
